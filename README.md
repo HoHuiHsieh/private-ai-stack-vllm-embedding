@@ -1,6 +1,6 @@
 # vllm-embedding
 
-> This directory is a sub-project of [`private-ai-stack`](../..).
+> This directory is a sub-project of [`private-ai-stack`](https://github.com/HoHuiHsieh/private-ai-stack).
 
 vLLM OpenAI-compatible embedding server for `Qwen/Qwen3-Embedding-0.6B`. Internal only: no ports are
 published. Other containers on the root stack's `backend` network call it at

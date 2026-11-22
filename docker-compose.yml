@@ -1,0 +1,55 @@
+# Prod services for vllm-embedding. Started by: ./start.sh prod vllm-embedding
+# vLLM OpenAI-compatible embedding server. Internal only (no ports).
+# Reachable from other containers on the backend network at http://vllm-embedding:8000/v1
+# (POST /v1/embeddings).
+name: private-ai-stack-vllm-embedding
+
+services:
+  vllm-embedding:
+    image: vllm/vllm-openai:latest
+    # Same invocation as the vLLM image's default entrypoint, with the model and limits read from
+    # env/.env.vllm-embedding. $$ keeps the variables for the container shell (not compose).
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - >-
+        exec python3 -m vllm.entrypoints.openai.api_server
+        --model "$${VLLM_EMBED_MODEL:-Qwen/Qwen3-Embedding-0.6B}"
+        --runner pooling
+        --convert embed
+        --host 0.0.0.0
+        --port 8000
+        --gpu-memory-utilization "$${VLLM_EMBED_GPU_MEM_UTIL:-0.10}"
+        --max-model-len "$${VLLM_EMBED_MAX_MODEL_LEN:-8192}"
+    env_file:
+      - ../../.env                       # shared settings (SSL_CERT_FILE)
+      - path: ./env/.env.vllm-embedding  # model and limits, optional HF_TOKEN
+        required: false
+    ipc: host                            # vLLM uses shared memory between workers
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - hf_cache:/root/.cache/huggingface   # model weights, kept across restarts
+      - ../../certs:/certs:ro               # stack CA, for model downloads through a proxy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 120s                 # first start downloads the model
+    restart: unless-stopped
+    networks:
+      backend:
+        aliases: [vllm-embedding]
+
+volumes:
+  hf_cache:
+
+networks:
+  backend:
+    external: true
+    name: private-ai-stack_backend       # root stack network; start the root stack first
